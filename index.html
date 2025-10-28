@@ -80,7 +80,7 @@
         <div id="tab-flavors" class="tab-content">
             <h2>Flavor Profile</h2>
 
-            <!-- SKU FIELD — BEFORE TABLE -->
+            <!-- SKU FIELD -->
             <div class="sku-group">
                 <label for="sku-input">SKU</label>
                 <input type="text" id="sku-input" placeholder="e.g. SHINCHA-2025" value="TEA">
@@ -114,15 +114,15 @@
 </div>
 
 <script>
-    // === FLAVOR REFERENCE ===
+    // === FLAVOR REFERENCE — ПО ТВОЕМУ ПОРЯДКУ ===
     const FLAVOR_REFERENCE = [
-        { label: "FLORAL",        default: 1 },
-        { label: "SWEET",         default: 2 },
-        { label: "ROASTY",        default: 1 },
-        { label: "SPICY",         default: 1 },
-        { label: "FRUITY",        default: 2 },
-        { label: "WOOD / EARTHY", default: 1 },
-        { label: "VEGETAL",       default: 3 }
+        { label: "VEGETAL",       default: 0 },
+        { label: "FLORAL",        default: 0 },
+        { label: "SWEET",         default: 0 },
+        { label: "ROASTY",        default: 0 },
+        { label: "NUTTY",         default: 0 },
+        { label: "FRUITY",        default: 0 },
+        { label: "WOOD / EARTHY", default: 0 }
     ];
 
     let flavorData = FLAVOR_REFERENCE.map(item => ({ ...item }));
@@ -209,7 +209,7 @@
                 textInput.readOnly = true;
 
                 colorInput.addEventListener('input', () => {
-                    textInput.value = colorInput.value;
+                    textInput.value = select.value;
                     currentConfig[field.id] = colorInput.value;
                     updateWheel();
                 });
