@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Flavor Wheel Editor — Moychay Style</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0; padding: 0; background: #f9f5f0; font-family: 'Georgia', serif; color: #333;
+        }
+        .container {
+            display: flex; height: 100vh; padding: 20px; gap: 20px;
+        }
+        .left, .right {
+            flex: 1; background: white; border-radius: 12px; padding: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05); overflow-y: auto;
+        }
+        h2 { margin-top: 0; color: #4a7c59; text-align: center; font-size: 18px; }
+
+        .tabs { display: flex; margin-bottom: 15px; border-bottom: 1px solid #eee; }
+        .tab {
+            flex: 1; padding: 10px; text-align: center; cursor: pointer;
+            background: #f5f5f5; border: 1px solid #ddd; border-bottom: none;
+            border-radius: 6px 6px 0 0; font-size: 14px;
+        }
+        .tab.active { background: white; font-weight: bold; color: #4a7c59; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { padding: 8px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #f8f8f8; color: #4a7c59; font-weight: normal; }
+        input[type="number"] {
+            width: 60px; padding: 6px; border: 1px solid #ccc; border-radius: 4px;
+            text-align: center; font-family: inherit;
+        }
+
+        .param-group { margin-bottom: 16px; }
+        .param-group label {
+            display: block; margin-bottom: 6px; font-size: 14px; color: #555;
+        }
+        .param-group input, .param-group select {
+            width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;
+            font-family: inherit;
+        }
+        .color-input {
+            display: flex; gap: 8px;
+        }
+        .color-input input[type="color"] { width: 40px; padding: 2px; }
+        .color-input input[type="text"] { flex: 1; }
+
+        .download-btn {
+            display: block; margin: 15px auto 0; padding: 10px 20px;
+            background: #4a7c59; color: white; border: none; border-radius: 6px;
+            cursor: pointer; font-family: inherit; font-size: 14px;
+        }
+        .download-btn:hover { background: #3a5f47; }
+
+        #flavor-wheel { width: 100%; max-width: 480px; margin: 0 auto; display: block; }
+
+        .sku-group {
+            margin-bottom: 15px; padding-bottom: 12px; border-bottom: 1px solid #eee;
+        }
+        .sku-group label { font-weight: bold; color: #4a7c59; }
+        .sku-group input {
+            font-family: monospace; font-size: 16px; padding: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- LEFT: TABS -->
+    <div class="left">
+        <div class="tabs">
+            <div class="tab active" data-tab="flavors">Flavors</div>
+            <div class="tab" data-tab="settings">Settings</div>
+        </div>
+
+        <!-- Tab: Flavors -->
+        <div id="tab-flavors" class="tab-content">
+            <h2>Flavor Profile</h2>
+
+            <!-- SKU FIELD — BEFORE TABLE -->
+            <div class="sku-group">
+                <label for="sku-input">SKU</label>
+                <input type="text" id="sku-input" placeholder="e.g. SHINCHA-2025" value="TEA">
+            </div>
+
+            <table id="flavor-table">
+                <thead>
+                <tr><th>Flavor</th><th>Intensity (0–3)</th></tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+            <p style="font-size:12px; color:#777; text-align:center; margin-top:10px;">
+                0 = absent, 1 = mild, 2 = medium, 3 = strong
+            </p>
+        </div>
+
+        <!-- Tab: Settings -->
+        <div id="tab-settings" class="tab-content" style="display: none;">
+            <h2>Diagram Settings</h2>
+            <div id="settings-container"></div>
+        </div>
+    </div>
+
+    <!-- RIGHT: DIAGRAM -->
+    <div class="right">
+        <h2>Flavor Wheel</h2>
+        <div id="flavor-wheel"></div>
+        <button class="download-btn" id="download-svg">Download SVG</button>
+        <button class="download-btn" id="download-png">Download PNG</button>
+    </div>
+</div>
+
+<script>
+    // === FLAVOR REFERENCE ===
+    const FLAVOR_REFERENCE = [
+        { label: "FLORAL",        default: 1 },
+        { label: "SWEET",         default: 2 },
+        { label: "ROASTY",        default: 1 },
+        { label: "SPICY",         default: 1 },
+        { label: "FRUITY",        default: 2 },
+        { label: "WOOD / EARTHY", default: 1 },
+        { label: "VEGETAL",       default: 3 }
+    ];
+
+    let flavorData = FLAVOR_REFERENCE.map(item => ({ ...item }));
+
+    // === DEFAULT CONFIG ===
+    const DEFAULT_CONFIG = {
+        size: 480,
+        padding: 24,
+        rings: 3,
+        sectorColor: "#d4e4d4",
+        gridColor: "#4a7c59",
+        circleBgColor: "#ffffff",
+        bgColor: "#f9f5f0",
+        labelColor: "#333333",
+        fontSize: 13,
+        strokeWidth: 1.2,
+        labelOffset: 28,
+        fontFamily: "Georgia, serif"
+    };
+
+    let currentConfig = { ...DEFAULT_CONFIG };
+
+    // === COUNTER FOR NNN ===
+    let fileCounter = 1;
+
+    // === SETTINGS SCHEMA ===
+    const SETTINGS_SCHEMA = [
+        { id: "size", label: "Size (px)", type: "number", min: 300, max: 800 },
+        { id: "padding", label: "Padding", type: "number", min: 10, max: 50 },
+        { id: "labelOffset", label: "Label Offset", type: "number", min: 10, max: 60 },
+        { id: "bgColor", label: "Background Color", type: "color" },
+        { id: "circleBgColor", label: "Circle Background", type: "color" },
+        { id: "sectorColor", label: "Sector Fill", type: "color" },
+        { id: "gridColor", label: "Grid Color", type: "color" },
+        { id: "labelColor", label: "Text Color", type: "color" },
+        { id: "fontSize", label: "Font Size", type: "number", min: 10, max: 20 },
+        { id: "strokeWidth", label: "Line Width", type: "number", min: 0.5, max: 3, step: 0.1 },
+        { id: "fontFamily", label: "Font Family", type: "select", options: [
+                { value: "Georgia, serif", label: "Georgia" },
+                { value: "Arial, sans-serif", label: "Arial" },
+                { value: "'Times New Roman', serif", label: "Times New Roman" },
+                { value: "Helvetica, sans-serif", label: "Helvetica" }
+            ]}
+    ];
+
+    // === GENERATE SETTINGS FORM ===
+    function renderSettings() {
+        const container = document.getElementById('settings-container');
+        container.innerHTML = '';
+
+        SETTINGS_SCHEMA.forEach(field => {
+            const group = document.createElement('div');
+            group.className = 'param-group';
+
+            const label = document.createElement('label');
+            label.textContent = field.label;
+            group.appendChild(label);
+
+            if (field.type === 'select') {
+                const select = document.createElement('select');
+                select.id = `opt-${field.id}`;
+                field.options.forEach(opt => {
+                    const option = document.createElement('option');
+                    option.value = opt.value;
+                    option.textContent = opt.label;
+                    if (opt.value === currentConfig[field.id]) option.selected = true;
+                    select.appendChild(option);
+                });
+                select.addEventListener('change', () => {
+                    currentConfig[field.id] = select.value;
+                    updateWheel();
+                });
+                group.appendChild(select);
+            } else if (field.type === 'color') {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'color-input';
+                const colorInput = document.createElement('input');
+                colorInput.type = 'color';
+                colorInput.id = `opt-${field.id}`;
+                colorInput.value = currentConfig[field.id];
+                const textInput = document.createElement('input');
+                textInput.type = 'text';
+                textInput.value = currentConfig[field.id];
+                textInput.readOnly = true;
+
+                colorInput.addEventListener('input', () => {
+                    textInput.value = colorInput.value;
+                    currentConfig[field.id] = colorInput.value;
+                    updateWheel();
+                });
+
+                wrapper.appendChild(colorInput);
+                wrapper.appendChild(textInput);
+                group.appendChild(wrapper);
+            } else {
+                const input = document.createElement('input');
+                input.type = field.type;
+                input.id = `opt-${field.id}`;
+                input.value = currentConfig[field.id];
+                if (field.min !== undefined) input.min = field.min;
+                if (field.max !== undefined) input.max = field.max;
+                if (field.step !== undefined) input.step = field.step;
+
+                input.addEventListener('input', () => {
+                    let value = field.type === 'number' ? parseFloat(input.value) : input.value;
+                    if (field.type === 'number' && isNaN(value)) return;
+                    currentConfig[field.id] = value;
+                    updateWheel();
+                });
+
+                group.appendChild(input);
+            }
+
+            container.appendChild(group);
+        });
+    }
+
+    // === RENDER FLAVOR TABLE ===
+    function renderFlavors() {
+        const tbody = document.querySelector('#flavor-table tbody');
+        tbody.innerHTML = '';
+        flavorData.forEach((item, i) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+      <td>${item.label}</td>
+      <td>
+        <input type="number" min="0" max="3" value="${item.value ?? item.default}"
+               data-index="${i}" class="flavor-input">
+      </td>
+    `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    // === GET FILENAME ===
+    function getFilename(ext) {
+        const skuInput = document.getElementById('sku-input');
+        const sku = (skuInput.value || 'FLAVOR').trim().toUpperCase().replace(/[^A-Z0-9-]/g, '');
+        const nnn = String(fileCounter).padStart(3, '0');
+        fileCounter++;
+        return `${sku}_${nnn}.${ext}`;
+    }
+
+    // === UPDATE WHEEL ===
+    function updateWheel() {
+        const data = flavorData.map(d => ({ label: d.label, value: d.value ?? d.default }));
+        document.getElementById('flavor-wheel').innerHTML = createFlavorWheelSVG(data, currentConfig);
+    }
+
+    // === SVG GENERATOR ===
+    function createFlavorWheelSVG(data, cfg) {
+        const N = data.length;
+        const S = cfg.size;
+        const cx = S / 2, cy = S / 2;
+        const R = (S / 2) - cfg.padding - 30;
+        const labelR = R + cfg.labelOffset;
+        const TAU = Math.PI * 2;
+        const A0 = -Math.PI / 2;
+
+        const polar = (r, a) => [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+
+        const arc = (r, a1, a2, sweep = 1) => {
+            const [x1, y1] = polar(r, a1);
+            const [x2, y2] = polar(r, a2);
+            const large = ((a2 - a1 + TAU) % TAU) > Math.PI ? 1 : 0;
+            return `M${x1.toFixed(2)},${y1.toFixed(2)} A${r},${r} 0 ${large},${sweep} ${x2.toFixed(2)},${y2.toFixed(2)}`;
+        };
+
+        const sectorPath = (r, a1, a2) => {
+            const [x1, y1] = polar(r, a1);
+            const [x2, y2] = polar(r, a2);
+            const large = ((a2 - a1 + TAU) % TAU) > Math.PI ? 1 : 0;
+            return `M${cx},${cy} L${x1.toFixed(2)},${y1.toFixed(2)} A${r},${r} 0 ${large},1 ${x2.toFixed(2)},${y2.toFixed(2)} Z`;
+        };
+
+        const bg = `<rect width="${S}" height="${S}" fill="${cfg.bgColor}"/>`;
+        const circleBg = `<circle cx="${cx}" cy="${cy}" r="${R}" fill="${cfg.circleBgColor}"/>`;
+
+        const sectors = data.map((d, i) => {
+            const a1 = A0 + i * TAU / N;
+            const a2 = A0 + (i + 1) * TAU / N;
+            let level = Math.round(d.value);
+            if (level < 0 || level > 3) level = 0;
+            if (level === 0) return '';
+
+            let r = (level / cfg.rings) * R;
+            return `<path d="${sectorPath(r, a1, a2)}" fill="${cfg.sectorColor}">
+              <title>${d.label}: ${level}/3</title>
+            </path>`;
+        }).join('');
+
+        const rings = Array.from({ length: cfg.rings }, (_, i) => {
+            const r = R * (i + 1) / cfg.rings;
+            return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${cfg.gridColor}" stroke-width="${cfg.strokeWidth}"/>`;
+        }).join('');
+
+        const spokes = data.map((_, i) => {
+            const a = A0 + i * TAU / N;
+            const [x, y] = polar(R, a);
+            return `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="${cfg.gridColor}" stroke-width="${cfg.strokeWidth}"/>`;
+        }).join('');
+
+        const labels = data.map((d, i) => {
+            const a1 = A0 + i * TAU / N;
+            const a2 = A0 + (i + 1) * TAU / N;
+            const pathId = `lbl_${i}`;
+            const dPath = arc(labelR, a1, a2, 1);
+            return `
+      <path id="${pathId}" d="${dPath}" fill="none"/>
+      <text fill="${cfg.labelColor}" font-family="${cfg.fontFamily}"
+            font-size="${cfg.fontSize}" dominant-baseline="central">
+        <textPath href="#${pathId}" startOffset="50%" text-anchor="middle">
+          ${d.label}
+        </textPath>
+      </text>`;
+        }).join('');
+
+        return `<svg viewBox="0 0 ${S} ${S}" width="${S}" height="${S}"
+               xmlns="http://www.w3.org/2000/svg">
+    ${bg}${circleBg}
+    <g id="sectors">${sectors}</g>
+    <g id="grid">${rings}${spokes}</g>
+    <g id="labels">${labels}</g>
+  </svg>`;
+    }
+
+    // === INPUT HANDLING ===
+    document.addEventListener('input', e => {
+        if (e.target.classList.contains('flavor-input')) {
+            const index = e.target.dataset.index;
+            const value = parseInt(e.target.value);
+            if (value >= 0 && value <= 3) {
+                flavorData[index].value = value;
+            }
+        }
+        updateWheel();
+    });
+
+    // === TAB SWITCHING ===
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+            tab.classList.add('active');
+            document.getElementById('tab-' + tab.dataset.tab).style.display = 'block';
+            if (tab.dataset.tab === 'settings') renderSettings();
+        });
+    });
+
+    // === DOWNLOAD SVG ===
+    document.getElementById('download-svg').addEventListener('click', () => {
+        const svg = document.querySelector('#flavor-wheel svg');
+        const data = new XMLSerializer().serializeToString(svg);
+        const blob = new Blob([data], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = getFilename('svg');
+        a.click();
+        URL.revokeObjectURL(url);
+    });
+
+    // === DOWNLOAD PNG ===
+    document.getElementById('download-png').addEventListener('click', () => {
+        const svg = document.querySelector('#flavor-wheel svg');
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        const svgData = new XMLSerializer().serializeToString(svg);
+        const blob = new Blob([svgData], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+
+        img.onload = () => {
+            canvas.width = svg.width.baseVal.value;
+            canvas.height = svg.height.baseVal.value;
+            ctx.drawImage(img, 0, 0);
+            canvas.toBlob(blob => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = getFilename('png');
+                a.click();
+                URL.revokeObjectURL(url);
+            });
+        };
+        img.src = url;
+    });
+
+    // === INIT ===
+    renderFlavors();
+    updateWheel();
+</script>
+
+</body>
+</html>
